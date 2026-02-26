@@ -11,6 +11,7 @@ pipeline {
         IMAGE_NAME = "myapp"
         CONTAINER_NAME = "myapp-container"
         DOCKERHUB_REPO = "mritika/myapp" // <-- replace with your DockerHub username/repo
+        DOCKERHUB_CREDENTIALS = "dockerhub-cred" // <-- Jenkins credential ID
     }
 
     stages {
@@ -24,11 +25,24 @@ pipeline {
             }
         }
 
+        stage('Login to DockerHub') {
+            steps {
+                script {
+                    echo "🔑 Logging in to DockerHub..."
+                    withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", 
+                                                      usernameVariable: 'DOCKER_USER', 
+                                                      passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    }
+                }
+            }
+        }
+
         stage('Push to DockerHub') {
             steps {
                 script {
-                    echo "📤 Pushing image to DockerHub..."
                     def imageTag = IMAGE_TAG ?: "${BUILD_NUMBER}"
+                    echo "📤 Tagging and pushing image to DockerHub..."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKERHUB_REPO}:${imageTag}"
                     sh "docker push ${DOCKERHUB_REPO}:${imageTag}"
                 }
@@ -59,20 +73,20 @@ pipeline {
                 }
             }
         }
-// <-- Add this stage next -->
-stage('Tag Last Successful Image') {
-    when {
-        expression { currentBuild.currentResult == 'SUCCESS' }
-    }
-    steps {
-        script {
-            def imageTag = IMAGE_TAG ?: "${BUILD_NUMBER}"
-            echo "💾 Tagging current image as last-successful for rollback..."
-            sh "docker tag ${DOCKERHUB_REPO}:${imageTag} ${DOCKERHUB_REPO}:last-successful"
-            sh "docker push ${DOCKERHUB_REPO}:last-successful"
+
+        stage('Tag Last Successful Image') {
+            when {
+                expression { currentBuild.currentResult == 'SUCCESS' }
+            }
+            steps {
+                script {
+                    def imageTag = IMAGE_TAG ?: "${BUILD_NUMBER}"
+                    echo "💾 Tagging current image as last-successful for rollback..."
+                    sh "docker tag ${DOCKERHUB_REPO}:${imageTag} ${DOCKERHUB_REPO}:last-successful"
+                    sh "docker push ${DOCKERHUB_REPO}:last-successful"
+                }
+            }
         }
-    }
-}
 
         stage('Rollback on Failure') {
             when {
@@ -98,4 +112,4 @@ stage('Tag Last Successful Image') {
             echo "❌ Pipeline failed!"
         }
     }
-}
+}      
