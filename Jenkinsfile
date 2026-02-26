@@ -1,5 +1,8 @@
 pipeline {
     agent any
+  tools {
+    nodejs "node18"
+}
 
     parameters {
         string(name: 'APP_ENV', defaultValue: 'dev', description: 'Environment')
