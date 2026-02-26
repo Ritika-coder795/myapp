@@ -1,8 +1,18 @@
-const http = require('http');
+const express = require('express');
+const app = express();
+const PORT = 3000;
 
-http.createServer((req, res) => {
-  res.write("Hello DevOps");
-  res.end();
-}).listen(3000, "0.0.0.0");
+app.get('/', (req, res) => {
+  res.send('Hello DevOps!');
+});
 
-console.log("Server running on port 3000");
+// Function for testing
+function sum(a, b) {
+  return a + b;
+}
+
+module.exports = sum;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
