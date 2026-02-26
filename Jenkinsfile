@@ -1,109 +1,87 @@
 pipeline {
     agent any
 
-    // -------------------------
-    // PARAMETERS
-    // -------------------------
+    // Parameters for flexible builds
     parameters {
-        string(name: 'APP_ENV', defaultValue: 'dev', description: 'Environment to deploy: dev/staging/prod')
-        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag (leave blank for Jenkins build number)')
+        string(name: 'APP_ENV', defaultValue: 'dev', description: 'Environment to deploy')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag (optional)')
     }
 
     environment {
         IMAGE_NAME = "myapp"
         CONTAINER_NAME = "myapp-container"
+        DOCKERHUB_REPO = "mritika/myapp" // <-- replace with your DockerHub username/repo
     }
 
     stages {
 
-        // -------------------------
-        // BUILD STAGE
-        // -------------------------
         stage('Build Docker Image') {
             steps {
                 script {
-                    def tag = params.IMAGE_TAG ?: "${BUILD_NUMBER}"
-                    sh "docker build -t ${IMAGE_NAME}:${tag} ."
-                }
-            }
-            post {
-                always {
-                    echo "✅ Build stage finished."
+                    echo "🔨 Building Docker image..."
+                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                 }
             }
         }
 
-        // -------------------------
-        // TEST STAGE
-        // -------------------------
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    echo "📤 Pushing image to DockerHub..."
+                    def imageTag = IMAGE_TAG ?: "${BUILD_NUMBER}"
+                    sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKERHUB_REPO}:${imageTag}"
+                    sh "docker push ${DOCKERHUB_REPO}:${imageTag}"
+                }
+            }
+        }
+
         stage('Run Tests') {
             steps {
                 script {
                     try {
+                        echo "🧪 Running tests..."
                         sh "npm test"
                     } catch (err) {
-                        echo "⚠️ Tests failed, but continuing pipeline..."
+                        echo "⚠️ Tests failed, continuing pipeline..."
                     }
                 }
             }
         }
 
-        // -------------------------
-        // DEPLOY STAGE
-        // -------------------------
         stage('Deploy Container') {
             steps {
                 script {
-                    def tag = params.IMAGE_TAG ?: "${BUILD_NUMBER}"
-
-                    // Stop and remove previous container
+                    def imageTag = IMAGE_TAG ?: "${BUILD_NUMBER}"
+                    echo "🚀 Deploying container to ${params.APP_ENV}..."
                     sh "docker rm -f ${CONTAINER_NAME} || true"
-
-                    // Run new container
-                    sh "docker run -d -p 3000:3000 --name ${CONTAINER_NAME} ${IMAGE_NAME}:${tag}"
-                }
-            }
-            post {
-                success {
+                    sh "docker run -d -p 3000:3000 --name ${CONTAINER_NAME} ${DOCKERHUB_REPO}:${imageTag}"
                     echo "✅ Deployment to ${params.APP_ENV} successful!"
-                }
-                failure {
-                    echo "❌ Deployment failed! Will attempt rollback..."
                 }
             }
         }
 
-        // -------------------------
-        // ROLLBACK STAGE (Optional)
-        // -------------------------
         stage('Rollback on Failure') {
             when {
                 expression { currentBuild.currentResult == 'FAILURE' }
             }
             steps {
                 script {
-                    echo "🔄 Rolling back to last stable Docker image..."
-                    // Replace <last_stable_tag> with previous successful build number manually or store in Jenkins
-                    sh "docker rm -f ${CONTAINER_NAME} || true"
-                    sh "docker run -d -p 3000:3000 --name ${CONTAINER_NAME} ${IMAGE_NAME}:<last_stable_tag>"
+                    echo "🔄 Rolling back to previous stable image..."
+                    sh "docker run -d -p 3000:3000 --name ${CONTAINER_NAME} ${DOCKERHUB_REPO}:last-successful || true"
                 }
             }
         }
     }
 
-    // -------------------------
-    // POST ACTIONS / NOTIFICATIONS
-    // -------------------------
     post {
         always {
-            echo "📌 Pipeline finished. Check logs for details."
+            echo "📌 Pipeline finished. Check console logs for details."
         }
         success {
             echo "🎉 Pipeline succeeded!"
         }
         failure {
             echo "❌ Pipeline failed!"
-            // In real company: add Slack/email notification here
         }
     }
 }
