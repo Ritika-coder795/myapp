@@ -1,18 +1,17 @@
 const express = require('express');
 const app = express();
-const PORT = 3000;
 
+// Sample route
 app.get('/', (req, res) => {
-  res.send('Hello DevOps!');
+  res.send("Hello DevOps");
 });
 
-// Function for testing
-function sum(a, b) {
-  return a + b;
+// Export app for testing
+module.exports = app;
+
+// Start server ONLY if file is run directly
+if (require.main === module) {
+  app.listen(3000, () => {
+    console.log("Server running on port 3000");
+  });
 }
-
-module.exports = sum;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
